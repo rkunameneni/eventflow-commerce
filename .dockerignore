@@ -1,0 +1,11 @@
+**/target
+.git
+.github
+.idea
+.vscode
+docs
+deploy/helm
+deploy/k8s
+infra
+observability
+**/*.md

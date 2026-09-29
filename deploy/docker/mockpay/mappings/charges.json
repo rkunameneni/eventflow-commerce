@@ -1,0 +1,53 @@
+{
+  "mappings": [
+    {
+      "name": "Approve by default",
+      "priority": 10,
+      "request": { "method": "POST", "url": "/v1/charges" },
+      "response": {
+        "status": 200,
+        "headers": { "Content-Type": "application/json" },
+        "jsonBody": { "id": "ch_{{randomValue length=16 type='ALPHANUMERIC'}}", "status": "APPROVED" }
+      }
+    },
+    {
+      "name": "Decline charges above 1000.00",
+      "priority": 5,
+      "request": {
+        "method": "POST",
+        "url": "/v1/charges",
+        "bodyPatterns": [ { "matchesJsonPath": "$[?(@.amount > 1000)]" } ]
+      },
+      "response": {
+        "status": 200,
+        "headers": { "Content-Type": "application/json" },
+        "jsonBody": { "id": "ch_{{randomValue length=16 type='ALPHANUMERIC'}}", "status": "DECLINED", "declineReason": "amount_over_limit" }
+      }
+    },
+    {
+      "name": "Simulated outage for customer 'chaos' (exercises retries, circuit breaker and the DLT)",
+      "priority": 1,
+      "request": {
+        "method": "POST",
+        "url": "/v1/charges",
+        "bodyPatterns": [ { "matchesJsonPath": "$[?(@.customer == 'chaos')]" } ]
+      },
+      "response": { "status": 503 }
+    },
+    {
+      "name": "Slow responses for customer 'slowpoke' (exercises the time limiter)",
+      "priority": 1,
+      "request": {
+        "method": "POST",
+        "url": "/v1/charges",
+        "bodyPatterns": [ { "matchesJsonPath": "$[?(@.customer == 'slowpoke')]" } ]
+      },
+      "response": {
+        "status": 200,
+        "fixedDelayMilliseconds": 5000,
+        "headers": { "Content-Type": "application/json" },
+        "jsonBody": { "id": "ch_slow", "status": "APPROVED" }
+      }
+    }
+  ]
+}

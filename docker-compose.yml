@@ -1,0 +1,159 @@
+# Local stack: infrastructure + all services.
+#   docker compose up --build
+# Add the observability stack (ELK, Prometheus, Jaeger):
+#   docker compose -f docker-compose.yml -f observability/docker-compose.yml up --build
+name: eventflow
+
+x-service-defaults: &service-defaults
+  restart: unless-stopped
+  depends_on:
+    postgres:
+      condition: service_healthy
+    kafka:
+      condition: service_healthy
+    redis:
+      condition: service_healthy
+
+x-service-env: &service-env
+  KAFKA_BOOTSTRAP_SERVERS: kafka:9092
+  DB_USERNAME: eventflow
+  DB_PASSWORD: eventflow
+  JWT_SECRET: ${JWT_SECRET:-local-development-signing-key-change-me}
+  JAVA_TOOL_OPTIONS: -XX:MaxRAMPercentage=75 -XX:+ExitOnOutOfMemoryError
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: eventflow
+      POSTGRES_PASSWORD: eventflow
+      POSTGRES_DB: eventflow
+    volumes:
+      - ./deploy/docker/postgres/init-databases.sql:/docker-entrypoint-initdb.d/init-databases.sql:ro
+      - postgres-data:/var/lib/postgresql/data
+    ports:
+      - "5432:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U eventflow"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+
+  kafka:
+    image: apache/kafka:3.8.0
+    environment:
+      KAFKA_NODE_ID: 1
+      KAFKA_PROCESS_ROLES: broker,controller
+      KAFKA_LISTENERS: PLAINTEXT://:9092,CONTROLLER://:9093,EXTERNAL://:29092
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka:9092,EXTERNAL://localhost:29092
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: CONTROLLER:PLAINTEXT,PLAINTEXT:PLAINTEXT,EXTERNAL:PLAINTEXT
+      KAFKA_CONTROLLER_LISTENER_NAMES: CONTROLLER
+      KAFKA_CONTROLLER_QUORUM_VOTERS: 1@kafka:9093
+      KAFKA_INTER_BROKER_LISTENER_NAME: PLAINTEXT
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+      KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR: 1
+      KAFKA_TRANSACTION_STATE_LOG_MIN_ISR: 1
+      KAFKA_GROUP_INITIAL_REBALANCE_DELAY_MS: 0
+      KAFKA_HEAP_OPTS: -Xms256m -Xmx512m
+    ports:
+      - "29092:29092"
+    healthcheck:
+      test: ["CMD-SHELL", "/opt/kafka/bin/kafka-broker-api-versions.sh --bootstrap-server localhost:9092 > /dev/null 2>&1"]
+      interval: 10s
+      timeout: 10s
+      retries: 20
+
+  redis:
+    image: redis:7-alpine
+    command: ["redis-server", "--maxmemory", "128mb", "--maxmemory-policy", "allkeys-lru"]
+    ports:
+      - "6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+
+  # External payment provider stand-in (see deploy/docker/mockpay/mappings).
+  mockpay:
+    image: wiremock/wiremock:3.9.1
+    command: ["--global-response-templating", "--disable-banner"]
+    volumes:
+      - ./deploy/docker/mockpay:/home/wiremock:ro
+    ports:
+      - "9090:8080"
+
+  order-service:
+    <<: *service-defaults
+    build:
+      context: .
+      dockerfile: order-service/Dockerfile
+    image: eventflow/order-service:local
+    environment:
+      <<: *service-env
+      DB_URL: jdbc:postgresql://postgres:5432/orders
+    ports:
+      - "8081:8081"
+
+  inventory-service:
+    <<: *service-defaults
+    build:
+      context: .
+      dockerfile: inventory-service/Dockerfile
+    image: eventflow/inventory-service:local
+    environment:
+      <<: *service-env
+      DB_URL: jdbc:postgresql://postgres:5432/inventory
+      REDIS_HOST: redis
+    ports:
+      - "8082:8082"
+
+  payment-service:
+    <<: *service-defaults
+    build:
+      context: .
+      dockerfile: payment-service/Dockerfile
+    image: eventflow/payment-service:local
+    environment:
+      <<: *service-env
+      DB_URL: jdbc:postgresql://postgres:5432/payments
+      PAYMENT_PROVIDER: mockpay
+      MOCKPAY_BASE_URL: http://mockpay:8080
+    ports:
+      - "8083:8083"
+
+  notification-service:
+    <<: *service-defaults
+    build:
+      context: .
+      dockerfile: notification-service/Dockerfile
+    image: eventflow/notification-service:local
+    environment:
+      <<: *service-env
+      DB_URL: jdbc:postgresql://postgres:5432/notifications
+    ports:
+      - "8084:8084"
+
+  api-gateway:
+    build:
+      context: .
+      dockerfile: api-gateway/Dockerfile
+    image: eventflow/api-gateway:local
+    restart: unless-stopped
+    depends_on:
+      redis:
+        condition: service_healthy
+    environment:
+      JWT_SECRET: ${JWT_SECRET:-local-development-signing-key-change-me}
+      REDIS_HOST: redis
+      DEMO_AUTH_ENABLED: "true"
+      ORDER_SERVICE_URI: http://order-service:8081
+      INVENTORY_SERVICE_URI: http://inventory-service:8082
+      PAYMENT_SERVICE_URI: http://payment-service:8083
+      NOTIFICATION_SERVICE_URI: http://notification-service:8084
+      JAVA_TOOL_OPTIONS: -XX:MaxRAMPercentage=75 -XX:+ExitOnOutOfMemoryError
+    ports:
+      - "8080:8080"
+
+volumes:
+  postgres-data:

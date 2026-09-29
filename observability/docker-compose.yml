@@ -1,0 +1,80 @@
+# Observability overlay - use together with the root compose file:
+#   docker compose -f docker-compose.yml -f observability/docker-compose.yml up --build
+#
+#   Kibana      http://localhost:5601   (logs; index pattern "eventflow-*")
+#   Prometheus  http://localhost:9091   (metrics scraped from /actuator/prometheus)
+#   Jaeger      http://localhost:16686  (traces exported over OTLP)
+#
+# Relative paths resolve against the project directory (the root compose file's folder).
+
+x-observability-env: &observability-env
+  SPRING_PROFILES_ACTIVE: logstash
+  LOGSTASH_DESTINATION: logstash:5000
+  MANAGEMENT_OTLP_TRACING_ENDPOINT: http://jaeger:4318/v1/traces
+
+services:
+  elasticsearch:
+    image: docker.elastic.co/elasticsearch/elasticsearch:8.15.3
+    environment:
+      discovery.type: single-node
+      xpack.security.enabled: "false"
+      ES_JAVA_OPTS: -Xms512m -Xmx512m
+    volumes:
+      - elasticsearch-data:/usr/share/elasticsearch/data
+    ports:
+      - "9200:9200"
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fs http://localhost:9200/_cluster/health || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 30
+
+  logstash:
+    image: docker.elastic.co/logstash/logstash:8.15.3
+    environment:
+      LS_JAVA_OPTS: -Xms256m -Xmx256m
+      XPACK_MONITORING_ENABLED: "false"
+    volumes:
+      - ./observability/logstash/pipeline:/usr/share/logstash/pipeline:ro
+    depends_on:
+      elasticsearch:
+        condition: service_healthy
+
+  kibana:
+    image: docker.elastic.co/kibana/kibana:8.15.3
+    environment:
+      ELASTICSEARCH_HOSTS: http://elasticsearch:9200
+    ports:
+      - "5601:5601"
+    depends_on:
+      elasticsearch:
+        condition: service_healthy
+
+  prometheus:
+    image: prom/prometheus:v2.54.1
+    volumes:
+      - ./observability/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - ./observability/prometheus/alerts.yml:/etc/prometheus/alerts.yml:ro
+    ports:
+      - "9091:9090"
+
+  jaeger:
+    image: jaegertracing/all-in-one:1.60
+    environment:
+      COLLECTOR_OTLP_ENABLED: "true"
+    ports:
+      - "16686:16686"
+
+  order-service:
+    environment: *observability-env
+  inventory-service:
+    environment: *observability-env
+  payment-service:
+    environment: *observability-env
+  notification-service:
+    environment: *observability-env
+  api-gateway:
+    environment: *observability-env
+
+volumes:
+  elasticsearch-data:
