@@ -1,0 +1,110 @@
+server:
+  port: 8083
+  shutdown: graceful
+
+spring:
+  application:
+    name: payment-service
+  threads:
+    virtual:
+      enabled: true
+  datasource:
+    url: ${DB_URL:jdbc:postgresql://localhost:5432/payments}
+    username: ${DB_USERNAME:eventflow}
+    password: ${DB_PASSWORD:eventflow}
+  jpa:
+    open-in-view: false
+    hibernate:
+      ddl-auto: validate
+    properties:
+      hibernate.jdbc.time_zone: UTC
+  flyway:
+    locations: classpath:db/migration/payment
+  kafka:
+    bootstrap-servers: ${KAFKA_BOOTSTRAP_SERVERS:localhost:9092}
+    consumer:
+      group-id: ${spring.application.name}
+      auto-offset-reset: earliest
+    producer:
+      acks: all
+      properties:
+        enable.idempotence: true
+    listener:
+      observation-enabled: true
+    template:
+      observation-enabled: true
+  data:
+    web:
+      pageable:
+        max-page-size: 100
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health, info, prometheus, metrics
+  endpoint:
+    health:
+      probes:
+        enabled: true
+  metrics:
+    tags:
+      application: ${spring.application.name}
+    distribution:
+      percentiles-histogram:
+        http.server.requests: true
+  tracing:
+    sampling:
+      probability: ${TRACING_SAMPLING_PROBABILITY:1.0}
+
+springdoc:
+  swagger-ui:
+    path: /swagger-ui.html
+
+resilience4j:
+  retry:
+    instances:
+      payment-provider:
+        max-attempts: 3
+        wait-duration: 200ms
+        enable-exponential-backoff: true
+        exponential-backoff-multiplier: 2
+        retry-exceptions:
+          - io.github.rkunameneni.eventflow.payment.provider.PaymentProviderException
+          - java.util.concurrent.TimeoutException
+  circuitbreaker:
+    instances:
+      payment-provider:
+        sliding-window-type: COUNT_BASED
+        sliding-window-size: 20
+        minimum-number-of-calls: 10
+        failure-rate-threshold: 50
+        slow-call-duration-threshold: 2s
+        slow-call-rate-threshold: 80
+        wait-duration-in-open-state: 30s
+        permitted-number-of-calls-in-half-open-state: 3
+        automatic-transition-from-open-to-half-open-enabled: true
+        record-exceptions:
+          - io.github.rkunameneni.eventflow.payment.provider.PaymentProviderException
+          - java.util.concurrent.TimeoutException
+  timelimiter:
+    instances:
+      payment-provider:
+        timeout-duration: 3s
+        cancel-running-future: true
+
+eventflow:
+  api:
+    description: Charges customers for reserved orders.
+  payment:
+    provider: ${PAYMENT_PROVIDER:mockpay}
+    mockpay:
+      base-url: ${MOCKPAY_BASE_URL:http://localhost:9090}
+      connect-timeout: 1s
+      read-timeout: 2s
+    sandbox:
+      approval-limit: 1000.00
+  security:
+    jwt-secret: ${JWT_SECRET:local-development-signing-key-change-me}
+  dlq:
+    base-path: /api/v1/admin/payments/dlq
