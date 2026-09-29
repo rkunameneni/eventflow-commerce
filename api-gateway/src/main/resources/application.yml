@@ -1,0 +1,84 @@
+server:
+  port: 8080
+  shutdown: graceful
+
+spring:
+  application:
+    name: api-gateway
+  data:
+    redis:
+      host: ${REDIS_HOST:localhost}
+      port: ${REDIS_PORT:6379}
+      ssl:
+        enabled: ${REDIS_SSL:false}
+  cloud:
+    gateway:
+      default-filters:
+        - name: RequestRateLimiter
+          args:
+            redis-rate-limiter.replenishRate: ${RATE_LIMIT_REPLENISH_RATE:20}
+            redis-rate-limiter.burstCapacity: ${RATE_LIMIT_BURST_CAPACITY:40}
+            redis-rate-limiter.requestedTokens: 1
+            key-resolver: "#{@principalOrIpKeyResolver}"
+      routes:
+        - id: order-service
+          uri: ${ORDER_SERVICE_URI:http://localhost:8081}
+          predicates:
+            - Path=/api/v1/orders/**,/api/v1/admin/orders/**
+        - id: inventory-service
+          uri: ${INVENTORY_SERVICE_URI:http://localhost:8082}
+          predicates:
+            - Path=/api/v1/products/**,/api/v1/admin/inventory/**
+        - id: payment-service
+          uri: ${PAYMENT_SERVICE_URI:http://localhost:8083}
+          predicates:
+            - Path=/api/v1/payments/**,/api/v1/admin/payments/**
+        - id: notification-service
+          uri: ${NOTIFICATION_SERVICE_URI:http://localhost:8084}
+          predicates:
+            - Path=/api/v1/notifications/**,/api/v1/admin/notifications/**
+      httpclient:
+        connect-timeout: 2000
+        response-timeout: 10s
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health, info, prometheus, metrics, gateway
+  endpoint:
+    health:
+      probes:
+        enabled: true
+  metrics:
+    tags:
+      application: ${spring.application.name}
+  tracing:
+    sampling:
+      probability: ${TRACING_SAMPLING_PROBABILITY:1.0}
+
+eventflow:
+  security:
+    jwt-secret: ${JWT_SECRET:local-development-signing-key-change-me}
+    demo-issuer:
+      enabled: ${DEMO_AUTH_ENABLED:false}
+      token-ttl: 30m
+      users:
+        - username: alice
+          password: ${DEMO_ALICE_PASSWORD:alice-password}
+          roles: [CUSTOMER]
+        - username: bob
+          password: ${DEMO_BOB_PASSWORD:bob-password}
+          roles: [CUSTOMER]
+        - username: admin
+          password: ${DEMO_ADMIN_PASSWORD:admin-password}
+          roles: [ADMIN]
+        # Customers the local mock payment provider misbehaves for (see deploy/docker/mockpay).
+        - username: chaos
+          password: ${DEMO_CHAOS_PASSWORD:chaos-password}
+          roles: [CUSTOMER]
+        - username: slowpoke
+          password: ${DEMO_SLOWPOKE_PASSWORD:slowpoke-password}
+          roles: [CUSTOMER]
+  # strangler.legacy-uri (env EVENTFLOW_STRANGLER_LEGACY_URI): base URL of the legacy monolith.
+  # When set, every path not matched by a service route is forwarded there.
