@@ -30,6 +30,7 @@
         <module>common-events</module>
         <module>service-support</module>
         <module>order-service</module>
+        <module>inventory-service</module>
     </modules>
 
     <properties>
