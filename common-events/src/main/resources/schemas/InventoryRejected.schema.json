@@ -1,0 +1,15 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/rkunameneni/eventflow-commerce/schemas/InventoryRejected.schema.json",
+  "title": "InventoryRejected",
+  "description": "Published by inventory-service on eventflow.inventory.rejected.v1 when stock cannot be reserved.",
+  "type": "object",
+  "required": ["eventId", "orderId", "customerId", "reason", "occurredAt"],
+  "properties": {
+    "eventId": { "type": "string", "format": "uuid" },
+    "orderId": { "type": "string", "format": "uuid" },
+    "customerId": { "type": "string", "minLength": 1 },
+    "reason": { "type": "string", "minLength": 1 },
+    "occurredAt": { "type": "string", "format": "date-time" }
+  }
+}

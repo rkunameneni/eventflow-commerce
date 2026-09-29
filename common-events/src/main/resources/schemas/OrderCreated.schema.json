@@ -1,0 +1,29 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/rkunameneni/eventflow-commerce/schemas/OrderCreated.schema.json",
+  "title": "OrderCreated",
+  "description": "Published by order-service on eventflow.order.created.v1 when an order is accepted.",
+  "type": "object",
+  "required": ["eventId", "orderId", "customerId", "lines", "totalAmount", "currency", "occurredAt"],
+  "properties": {
+    "eventId": { "type": "string", "format": "uuid" },
+    "orderId": { "type": "string", "format": "uuid" },
+    "customerId": { "type": "string", "minLength": 1 },
+    "lines": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "required": ["sku", "quantity", "unitPrice"],
+        "properties": {
+          "sku": { "type": "string", "minLength": 1 },
+          "quantity": { "type": "integer", "minimum": 1 },
+          "unitPrice": { "type": "number", "exclusiveMinimum": 0 }
+        }
+      }
+    },
+    "totalAmount": { "type": "number", "exclusiveMinimum": 0 },
+    "currency": { "type": "string", "pattern": "^[A-Z]{3}$" },
+    "occurredAt": { "type": "string", "format": "date-time" }
+  }
+}

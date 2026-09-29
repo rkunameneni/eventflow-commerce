@@ -1,0 +1,16 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/rkunameneni/eventflow-commerce/schemas/InventoryReserved.schema.json",
+  "title": "InventoryReserved",
+  "description": "Published by inventory-service on eventflow.inventory.reserved.v1 once every order line is reserved.",
+  "type": "object",
+  "required": ["eventId", "orderId", "customerId", "totalAmount", "currency", "occurredAt"],
+  "properties": {
+    "eventId": { "type": "string", "format": "uuid" },
+    "orderId": { "type": "string", "format": "uuid" },
+    "customerId": { "type": "string", "minLength": 1 },
+    "totalAmount": { "type": "number", "exclusiveMinimum": 0 },
+    "currency": { "type": "string", "pattern": "^[A-Z]{3}$" },
+    "occurredAt": { "type": "string", "format": "date-time" }
+  }
+}

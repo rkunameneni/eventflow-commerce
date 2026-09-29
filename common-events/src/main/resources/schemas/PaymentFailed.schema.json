@@ -1,0 +1,15 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/rkunameneni/eventflow-commerce/schemas/PaymentFailed.schema.json",
+  "title": "PaymentFailed",
+  "description": "Published by payment-service on eventflow.payment.failed.v1 when the provider declines the charge.",
+  "type": "object",
+  "required": ["eventId", "orderId", "customerId", "reason", "occurredAt"],
+  "properties": {
+    "eventId": { "type": "string", "format": "uuid" },
+    "orderId": { "type": "string", "format": "uuid" },
+    "customerId": { "type": "string", "minLength": 1 },
+    "reason": { "type": "string", "minLength": 1 },
+    "occurredAt": { "type": "string", "format": "date-time" }
+  }
+}

@@ -1,0 +1,15 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/rkunameneni/eventflow-commerce/schemas/OrderCancelled.schema.json",
+  "title": "OrderCancelled",
+  "description": "Published by order-service on eventflow.order.cancelled.v1 when the saga ends in failure.",
+  "type": "object",
+  "required": ["eventId", "orderId", "customerId", "reason", "occurredAt"],
+  "properties": {
+    "eventId": { "type": "string", "format": "uuid" },
+    "orderId": { "type": "string", "format": "uuid" },
+    "customerId": { "type": "string", "minLength": 1 },
+    "reason": { "type": "string", "minLength": 1 },
+    "occurredAt": { "type": "string", "format": "date-time" }
+  }
+}
