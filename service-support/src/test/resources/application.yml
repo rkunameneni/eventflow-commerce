@@ -1,0 +1,17 @@
+spring:
+  application:
+    name: platform-it
+  flyway:
+    locations: classpath:db/platform-it
+  kafka:
+    consumer:
+      group-id: platform-it
+      auto-offset-reset: earliest
+
+eventflow:
+  consumer-retry:
+    max-retries: 2
+    initial-interval: 50ms
+    max-interval: 200ms
+  outbox:
+    poll-interval-ms: 100

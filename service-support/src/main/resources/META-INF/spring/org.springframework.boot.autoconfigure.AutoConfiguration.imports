@@ -1,0 +1,3 @@
+io.github.rkunameneni.eventflow.support.config.MessagingAutoConfiguration
+io.github.rkunameneni.eventflow.support.config.WebAutoConfiguration
+io.github.rkunameneni.eventflow.support.config.ResourceServerAutoConfiguration

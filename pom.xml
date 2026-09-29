@@ -28,6 +28,7 @@
 
     <modules>
         <module>common-events</module>
+        <module>service-support</module>
     </modules>
 
     <properties>
