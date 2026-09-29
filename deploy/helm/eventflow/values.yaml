@@ -1,0 +1,111 @@
+# Default values for the eventflow chart. Every service shares the pod template in
+# templates/deployment.yaml; per-service settings live under `services`.
+
+image:
+  registry: ghcr.io/rkunameneni
+  # Defaults to .Chart.AppVersion when empty.
+  tag: ""
+  pullPolicy: IfNotPresent
+
+imagePullSecrets: []
+
+serviceAccount:
+  create: true
+  name: eventflow
+  # e.g. eks.amazonaws.com/role-arn for IRSA
+  annotations: {}
+
+# Non-secret settings shared by all services (rendered into a ConfigMap).
+config:
+  KAFKA_BOOTSTRAP_SERVERS: kafka:9092
+  REDIS_HOST: redis
+  REDIS_SSL: "false"
+  POSTGRES_HOST: postgres
+  POSTGRES_DATABASE: eventflow
+  TRACING_SAMPLING_PROBABILITY: "0.1"
+  JAVA_TOOL_OPTIONS: -XX:MaxRAMPercentage=75 -XX:+ExitOnOutOfMemoryError
+
+# Secrets are referenced, never templated with values. Create the Secret out of band
+# (External Secrets Operator, Sealed Secrets, `kubectl create secret`).
+secrets:
+  existingSecret: eventflow-secrets
+  jwtSecretKey: jwt-secret
+  dbUsernameKey: db-username
+  dbPasswordKey: db-password
+
+podSecurityContext:
+  runAsNonRoot: true
+  runAsUser: 10001
+  fsGroup: 10001
+  seccompProfile:
+    type: RuntimeDefault
+
+containerSecurityContext:
+  allowPrivilegeEscalation: false
+  readOnlyRootFilesystem: true
+  capabilities:
+    drop: ["ALL"]
+
+probes:
+  startup:
+    periodSeconds: 5
+    failureThreshold: 36
+  liveness:
+    periodSeconds: 10
+    failureThreshold: 3
+  readiness:
+    periodSeconds: 5
+    failureThreshold: 3
+
+defaults:
+  replicaCount: 2
+  resources:
+    requests:
+      cpu: 250m
+      memory: 512Mi
+    limits:
+      memory: 768Mi
+  autoscaling:
+    enabled: true
+    minReplicas: 2
+    maxReplicas: 6
+    targetCPUUtilizationPercentage: 70
+  podDisruptionBudget:
+    enabled: true
+    maxUnavailable: 1
+
+services:
+  api-gateway:
+    port: 8080
+    env:
+      ORDER_SERVICE_URI: http://order-service:8081
+      INVENTORY_SERVICE_URI: http://inventory-service:8082
+      PAYMENT_SERVICE_URI: http://payment-service:8083
+      NOTIFICATION_SERVICE_URI: http://notification-service:8084
+  order-service:
+    port: 8081
+    database: orders
+  inventory-service:
+    port: 8082
+    database: inventory
+  payment-service:
+    port: 8083
+    database: payments
+    env:
+      PAYMENT_PROVIDER: mockpay
+      MOCKPAY_BASE_URL: http://mockpay:8080
+    autoscaling:
+      maxReplicas: 4
+  notification-service:
+    port: 8084
+    database: notifications
+    autoscaling:
+      minReplicas: 1
+      maxReplicas: 3
+
+ingress:
+  enabled: false
+  className: alb
+  host: api.eventflow.example.com
+  annotations: {}
+  tls: []

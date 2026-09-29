@@ -1,0 +1,8 @@
+EventFlow Commerce {{ .Chart.AppVersion }} is deployed to namespace {{ .Release.Namespace }}.
+
+The services read secrets from the "{{ .Values.secrets.existingSecret }}" Secret; make sure it
+exists with the keys {{ .Values.secrets.jwtSecretKey }}, {{ .Values.secrets.dbUsernameKey }} and {{ .Values.secrets.dbPasswordKey }}.
+
+Try the gateway locally:
+  kubectl -n {{ .Release.Namespace }} port-forward svc/api-gateway 8080:8080
+  curl http://localhost:8080/api/v1/products

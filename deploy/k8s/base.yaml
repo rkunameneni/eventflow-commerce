@@ -1,0 +1,68 @@
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: eventflow
+  labels:
+    app.kubernetes.io/part-of: eventflow
+automountServiceAccountToken: false
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: eventflow-config
+  labels:
+    app.kubernetes.io/part-of: eventflow
+data:
+  # Managed services in AWS (RDS, MSK, ElastiCache); override per environment with Kustomize.
+  POSTGRES_HOST: eventflow-postgres.example.internal
+  KAFKA_BOOTSTRAP_SERVERS: b-1.eventflow-msk.example.internal:9092,b-2.eventflow-msk.example.internal:9092
+  REDIS_HOST: eventflow-redis.example.internal
+  REDIS_SSL: "true"
+  MOCKPAY_BASE_URL: http://mockpay:8080
+  TRACING_SAMPLING_PROBABILITY: "0.1"
+  MANAGEMENT_OTLP_TRACING_ENDPOINT: http://otel-collector.observability:4318/v1/traces
+  JAVA_TOOL_OPTIONS: -XX:MaxRAMPercentage=75 -XX:+ExitOnOutOfMemoryError
+---
+# Secrets are never committed. External Secrets Operator syncs them from AWS Secrets Manager
+# into the "eventflow-secrets" Secret that the Deployments reference.
+apiVersion: external-secrets.io/v1beta1
+kind: ExternalSecret
+metadata:
+  name: eventflow-secrets
+spec:
+  refreshInterval: 1h
+  secretStoreRef:
+    kind: ClusterSecretStore
+    name: aws-secrets-manager
+  target:
+    name: eventflow-secrets
+  data:
+    - secretKey: jwt-secret
+      remoteRef: { key: eventflow/prod/jwt-signing-key }
+    - secretKey: db-username
+      remoteRef: { key: eventflow/prod/db, property: username }
+    - secretKey: db-password
+      remoteRef: { key: eventflow/prod/db, property: password }
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: eventflow
+  annotations:
+    alb.ingress.kubernetes.io/scheme: internet-facing
+    alb.ingress.kubernetes.io/target-type: ip
+    alb.ingress.kubernetes.io/listen-ports: '[{"HTTPS": 443}]'
+    alb.ingress.kubernetes.io/healthcheck-path: /actuator/health/readiness
+spec:
+  ingressClassName: alb
+  rules:
+    - host: api.eventflow.example.com
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: api-gateway
+                port:
+                  name: http
